@@ -98,18 +98,25 @@ public class HttpResponseDecoder extends HttpObjectDecoder {
      */
     public HttpResponseDecoder(
             int maxInitialLineLength, int maxHeaderSize) {
-        super(maxInitialLineLength, maxHeaderSize, true);
+        super(maxInitialLineLength, maxHeaderSize, DEFAULT_CHUNKED_SUPPORTED);
     }
 
     public HttpResponseDecoder(
             int maxInitialLineLength, int maxHeaderSize, boolean validateHeaders) {
-        super(maxInitialLineLength, maxHeaderSize, true, validateHeaders);
+        super(maxInitialLineLength, maxHeaderSize, DEFAULT_CHUNKED_SUPPORTED, validateHeaders);
     }
 
     public HttpResponseDecoder(
             int maxInitialLineLength, int maxHeaderSize, boolean validateHeaders,
             int initialBufferSize) {
-        super(maxInitialLineLength, maxHeaderSize, true, validateHeaders, initialBufferSize);
+        super(maxInitialLineLength, maxHeaderSize, DEFAULT_CHUNKED_SUPPORTED, validateHeaders, initialBufferSize);
+    }
+
+    public HttpResponseDecoder(
+            int maxInitialLineLength, int maxHeaderSize, boolean validateHeaders,
+            int initialBufferSize, boolean allowDuplicateContentLengths) {
+        super(maxInitialLineLength, maxHeaderSize, DEFAULT_CHUNKED_SUPPORTED, validateHeaders,
+              initialBufferSize, allowDuplicateContentLengths);
     }
 
     @Override

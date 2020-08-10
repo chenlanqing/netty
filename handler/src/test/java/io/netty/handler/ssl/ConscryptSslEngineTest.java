@@ -20,6 +20,7 @@ import org.junit.Ignore;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
+import javax.net.ssl.SSLSessionContext;
 import java.security.Provider;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -79,17 +80,14 @@ public class ConscryptSslEngineTest extends SSLEngineTest {
     public void testMutualAuthValidClientCertChainTooLongFailRequireClientAuth() {
     }
 
-    @Ignore("Ignore due bug in Conscrypt")
     @Override
-    public void testSessionBindingEvent() throws Exception {
-        // Ignore due bug in Conscrypt where the incorrect SSLSession object is used in the SSLSessionBindingEvent.
-        // See https://github.com/google/conscrypt/issues/593
+    protected void invalidateSessionsAndAssert(SSLSessionContext context) {
+        // Not supported by conscrypt
     }
 
-    @Ignore("Ignore due bug in Conscrypt")
-    @Override
-    public void testHandshakeSession() throws Exception {
-        // Ignore as Conscrypt does not correctly return the local certificates while the TrustManager is invoked.
-        // See https://github.com/google/conscrypt/issues/634
+    @Ignore("Possible Conscrypt bug")
+    public void testSessionCacheTimeout() {
+        // Skip
+        // https://github.com/google/conscrypt/issues/851
     }
 }

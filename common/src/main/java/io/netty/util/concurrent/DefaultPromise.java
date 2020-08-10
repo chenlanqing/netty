@@ -15,17 +15,16 @@
  */
 package io.netty.util.concurrent;
 
-import io.netty.util.internal.InternalThreadLocalMap;
-import io.netty.util.internal.PlatformDependent;
 import io.netty.util.internal.StringUtil;
-import io.netty.util.internal.SystemPropertyUtil;
 import io.netty.util.internal.ThrowableUtil;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
 
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 
 import static java.util.Objects.requireNonNull;
@@ -35,8 +34,6 @@ public class DefaultPromise<V> implements Promise<V> {
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(DefaultPromise.class);
     private static final InternalLogger rejectedExecutionLogger =
             InternalLoggerFactory.getInstance(DefaultPromise.class.getName() + ".rejectedExecution");
-    private static final int MAX_LISTENER_STACK_DEPTH = Math.min(8,
-            SystemPropertyUtil.getInt("io.netty.defaultPromise.maxListenerStackDepth", 8));
     @SuppressWarnings("rawtypes")
     private static final AtomicReferenceFieldUpdater<DefaultPromise, Object> RESULT_UPDATER =
             AtomicReferenceFieldUpdater.newUpdater(DefaultPromise.class, Object.class, "result");
@@ -44,6 +41,7 @@ public class DefaultPromise<V> implements Promise<V> {
     private static final Object UNCANCELLABLE = new Object();
     private static final CauseHolder CANCELLATION_CAUSE_HOLDER = new CauseHolder(ThrowableUtil.unknownStackTrace(
             new CancellationException(), DefaultPromise.class, "cancel(...)"));
+    private static final StackTraceElement[] CANCELLATION_STACK = CANCELLATION_CAUSE_HOLDER.cause.getStackTrace();
 
     private volatile Object result;
     private final EventExecutor executor;
@@ -127,10 +125,38 @@ public class DefaultPromise<V> implements Promise<V> {
         return result == null;
     }
 
+    private static final class LeanCancellationException extends CancellationException {
+        private static final long serialVersionUID = 2794674970981187807L;
+
+        @Override
+        public Throwable fillInStackTrace() {
+            setStackTrace(CANCELLATION_STACK);
+            return this;
+        }
+
+        @Override
+        public String toString() {
+            return CancellationException.class.getName();
+        }
+    }
+
     @Override
     public Throwable cause() {
-        Object result = this.result;
-        return (result instanceof CauseHolder) ? ((CauseHolder) result).cause : null;
+        return cause0(result);
+    }
+
+    private Throwable cause0(Object result) {
+        if (!(result instanceof CauseHolder)) {
+            return null;
+        }
+        if (result == CANCELLATION_CAUSE_HOLDER) {
+            CancellationException ce = new LeanCancellationException();
+            if (RESULT_UPDATER.compareAndSet(this, CANCELLATION_CAUSE_HOLDER, new CauseHolder(ce))) {
+                return ce;
+            }
+            result = this.result;
+        }
+        return ((CauseHolder) result).cause;
     }
 
     @Override
@@ -290,6 +316,50 @@ public class DefaultPromise<V> implements Promise<V> {
         return (V) result;
     }
 
+    @SuppressWarnings("unchecked")
+    @Override
+    public V get() throws InterruptedException, ExecutionException {
+        Object result = this.result;
+        if (!isDone0(result)) {
+            await();
+            result = this.result;
+        }
+        if (result == SUCCESS || result == UNCANCELLABLE) {
+            return null;
+        }
+        Throwable cause = cause0(result);
+        if (cause == null) {
+            return (V) result;
+        }
+        if (cause instanceof CancellationException) {
+            throw (CancellationException) cause;
+        }
+        throw new ExecutionException(cause);
+    }
+
+    @SuppressWarnings("unchecked")
+    @Override
+    public V get(long timeout, TimeUnit unit) throws InterruptedException, ExecutionException, TimeoutException {
+        Object result = this.result;
+        if (!isDone0(result)) {
+            if (!await(timeout, unit)) {
+                throw new TimeoutException();
+            }
+            result = this.result;
+        }
+        if (result == SUCCESS || result == UNCANCELLABLE) {
+            return null;
+        }
+        Throwable cause = cause0(result);
+        if (cause == null) {
+            return (V) result;
+        }
+        if (cause instanceof CancellationException) {
+            throw (CancellationException) cause;
+        }
+        throw new ExecutionException(cause);
+    }
+
     /**
      * {@inheritDoc}
      *
@@ -384,65 +454,8 @@ public class DefaultPromise<V> implements Promise<V> {
         }
     }
 
-    /**
-     * Notify a listener that a future has completed.
-     * <p>
-     * This method has a fixed depth of {@link #MAX_LISTENER_STACK_DEPTH} that will limit recursion to prevent
-     * {@link StackOverflowError} and will stop notifying listeners added after this threshold is exceeded.
-     * @param eventExecutor the executor to use to notify the listener {@code listener}.
-     * @param future the future that is complete.
-     * @param listener the listener to notify.
-     */
-    protected static void notifyListener(
-            EventExecutor eventExecutor, final Future<?> future, final GenericFutureListener<?> listener) {
-        requireNonNull(eventExecutor, "eventExecutor");
-        requireNonNull(future, "future");
-        requireNonNull(listener, "listener");
-        notifyListenerWithStackOverFlowProtection(eventExecutor, future, listener);
-    }
-
     private void notifyListeners() {
-        EventExecutor executor = executor();
-        if (executor.inEventLoop()) {
-            final InternalThreadLocalMap threadLocals = InternalThreadLocalMap.get();
-            final int stackDepth = threadLocals.futureListenerStackDepth();
-            if (stackDepth < MAX_LISTENER_STACK_DEPTH) {
-                threadLocals.setFutureListenerStackDepth(stackDepth + 1);
-                try {
-                    notifyListenersNow();
-                } finally {
-                    threadLocals.setFutureListenerStackDepth(stackDepth);
-                }
-                return;
-            }
-        }
-
-        safeExecute(executor, this::notifyListenersNow);
-    }
-
-    /**
-     * The logic in this method should be identical to {@link #notifyListeners()} but
-     * cannot share code because the listener(s) cannot be cached for an instance of {@link DefaultPromise} since the
-     * listener(s) may be changed and is protected by a synchronized operation.
-     */
-    private static void notifyListenerWithStackOverFlowProtection(final EventExecutor executor,
-                                                                  final Future<?> future,
-                                                                  final GenericFutureListener<?> listener) {
-        if (executor.inEventLoop()) {
-            final InternalThreadLocalMap threadLocals = InternalThreadLocalMap.get();
-            final int stackDepth = threadLocals.futureListenerStackDepth();
-            if (stackDepth < MAX_LISTENER_STACK_DEPTH) {
-                threadLocals.setFutureListenerStackDepth(stackDepth + 1);
-                try {
-                    notifyListener0(future, listener);
-                } finally {
-                    threadLocals.setFutureListenerStackDepth(stackDepth);
-                }
-                return;
-            }
-        }
-
-        safeExecute(executor, () -> notifyListener0(future, listener));
+        safeExecute(executor(), this::notifyListenersNow);
     }
 
     private void notifyListenersNow() {
@@ -480,7 +493,7 @@ public class DefaultPromise<V> implements Promise<V> {
     }
 
     @SuppressWarnings({ "unchecked", "rawtypes" })
-    private static void notifyListener0(Future future, GenericFutureListener l) {
+    static void notifyListener0(Future future, GenericFutureListener l) {
         try {
             l.operationComplete(future);
         } catch (Throwable t) {
@@ -632,25 +645,14 @@ public class DefaultPromise<V> implements Promise<V> {
 
         final ProgressiveFuture<V> self = (ProgressiveFuture<V>) this;
 
-        EventExecutor executor = executor();
-        if (executor.inEventLoop()) {
-            if (listeners instanceof GenericProgressiveFutureListener[]) {
-                notifyProgressiveListeners0(
-                        self, (GenericProgressiveFutureListener<?>[]) listeners, progress, total);
-            } else {
-                notifyProgressiveListener0(
-                        self, (GenericProgressiveFutureListener<ProgressiveFuture<V>>) listeners, progress, total);
-            }
+        if (listeners instanceof GenericProgressiveFutureListener[]) {
+            final GenericProgressiveFutureListener<?>[] array =
+                    (GenericProgressiveFutureListener<?>[]) listeners;
+            safeExecute(executor(), () -> notifyProgressiveListeners0(self, array, progress, total));
         } else {
-            if (listeners instanceof GenericProgressiveFutureListener[]) {
-                final GenericProgressiveFutureListener<?>[] array =
-                        (GenericProgressiveFutureListener<?>[]) listeners;
-                safeExecute(executor, () -> notifyProgressiveListeners0(self, array, progress, total));
-            } else {
-                final GenericProgressiveFutureListener<ProgressiveFuture<V>> l =
-                        (GenericProgressiveFutureListener<ProgressiveFuture<V>>) listeners;
-                safeExecute(executor, () -> notifyProgressiveListener0(self, l, progress, total));
-            }
+            final GenericProgressiveFutureListener<ProgressiveFuture<V>> l =
+                    (GenericProgressiveFutureListener<ProgressiveFuture<V>>) listeners;
+            safeExecute(executor(), () -> notifyProgressiveListener0(self, l, progress, total));
         }
     }
 
@@ -736,7 +738,7 @@ public class DefaultPromise<V> implements Promise<V> {
         }
     }
 
-    private static void safeExecute(EventExecutor executor, Runnable task) {
+    static void safeExecute(EventExecutor executor, Runnable task) {
         try {
             executor.execute(task);
         } catch (Throwable t) {

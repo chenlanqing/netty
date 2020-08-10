@@ -24,6 +24,8 @@ import io.netty.channel.ChannelPipeline;
 import io.netty.handler.ssl.ApplicationProtocolConfig.Protocol;
 import io.netty.handler.ssl.ApplicationProtocolConfig.SelectedListenerFailureBehavior;
 import io.netty.handler.ssl.ApplicationProtocolConfig.SelectorFailureBehavior;
+import io.netty.util.AttributeMap;
+import io.netty.util.DefaultAttributeMap;
 import io.netty.util.internal.EmptyArrays;
 
 import java.security.Provider;
@@ -97,6 +99,7 @@ public abstract class SslContext {
     }
 
     private final boolean startTls;
+    private final AttributeMap attributes = new DefaultAttributeMap();
 
     /**
      * Returns the default server-side implementation provider currently in use.
@@ -863,6 +866,13 @@ public abstract class SslContext {
     }
 
     /**
+     * Returns the {@link AttributeMap} that belongs to this {@link SslContext} .
+     */
+    public final AttributeMap attributes() {
+        return attributes;
+    }
+
+    /**
      * Returns {@code true} if and only if this context is for server-side.
      */
     public final boolean isServer() {
@@ -882,12 +892,16 @@ public abstract class SslContext {
     /**
      * Returns the size of the cache used for storing SSL session objects.
      */
-    public abstract long sessionCacheSize();
+    public long sessionCacheSize() {
+        return sessionContext().getSessionCacheSize();
+    }
 
     /**
      * Returns the timeout for the cached SSL session objects, in seconds.
      */
-    public abstract long sessionTimeout();
+    public long sessionTimeout() {
+        return sessionContext().getSessionTimeout();
+    }
 
     /**
      * @deprecated Use {@link #applicationProtocolNegotiator()} instead.

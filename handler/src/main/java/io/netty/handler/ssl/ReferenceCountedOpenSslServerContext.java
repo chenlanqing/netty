@@ -21,6 +21,7 @@ import io.netty.internal.tcnative.SSL;
 import io.netty.internal.tcnative.SSLContext;
 import io.netty.internal.tcnative.SniHostNameMatcher;
 import io.netty.util.CharsetUtil;
+import io.netty.util.internal.SystemPropertyUtil;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
 
@@ -49,6 +50,9 @@ public final class ReferenceCountedOpenSslServerContext extends ReferenceCounted
     private static final byte[] ID = {'n', 'e', 't', 't', 'y'};
     private final OpenSslServerSessionContext sessionContext;
 
+    private static final boolean ENABLE_SESSION_TICKET =
+            SystemPropertyUtil.getBoolean("jdk.tls.server.enableSessionTicketExtension", false);
+
     ReferenceCountedOpenSslServerContext(
             X509Certificate[] trustCertCollection, TrustManagerFactory trustManagerFactory,
             X509Certificate[] keyCertChain, PrivateKey key, String keyPassword, KeyManagerFactory keyManagerFactory,
@@ -66,13 +70,17 @@ public final class ReferenceCountedOpenSslServerContext extends ReferenceCounted
             Iterable<String> ciphers, CipherSuiteFilter cipherFilter, OpenSslApplicationProtocolNegotiator apn,
             long sessionCacheSize, long sessionTimeout, ClientAuth clientAuth, String[] protocols, boolean startTls,
             boolean enableOcsp, String keyStore) throws SSLException {
-        super(ciphers, cipherFilter, apn, sessionCacheSize, sessionTimeout, SSL.SSL_MODE_SERVER, keyCertChain,
+        super(ciphers, cipherFilter, apn, SSL.SSL_MODE_SERVER, keyCertChain,
               clientAuth, protocols, startTls, enableOcsp, true);
         // Create a new SSL_CTX and configure it.
         boolean success = false;
         try {
             sessionContext = newSessionContext(this, ctx, engineMap, trustCertCollection, trustManagerFactory,
-                                                      keyCertChain, key, keyPassword, keyManagerFactory, keyStore);
+                    keyCertChain, key, keyPassword, keyManagerFactory, keyStore,
+                    sessionCacheSize, sessionTimeout);
+            if (ENABLE_SESSION_TICKET) {
+                sessionContext.setTicketKeys();
+            }
             success = true;
         } finally {
             if (!success) {
@@ -92,13 +100,13 @@ public final class ReferenceCountedOpenSslServerContext extends ReferenceCounted
                                                          TrustManagerFactory trustManagerFactory,
                                                          X509Certificate[] keyCertChain, PrivateKey key,
                                                          String keyPassword, KeyManagerFactory keyManagerFactory,
-                                                         String keyStore)
+                                                         String keyStore, long sessionCacheSize, long sessionTimeout)
             throws SSLException {
         OpenSslKeyMaterialProvider keyMaterialProvider = null;
         try {
             try {
                 SSLContext.setVerify(ctx, SSL.SSL_CVERIFY_NONE, VERIFY_DEPTH);
-                if (!OpenSsl.useKeyManagerFactory()) {
+                if (!OpenSsl.supportsKeyManagerFactory()) {
                     if (keyManagerFactory != null) {
                         throw new IllegalArgumentException(
                                 "KeyManagerFactory not supported");
@@ -179,6 +187,14 @@ public final class ReferenceCountedOpenSslServerContext extends ReferenceCounted
 
             OpenSslServerSessionContext sessionContext = new OpenSslServerSessionContext(thiz, keyMaterialProvider);
             sessionContext.setSessionIdContext(ID);
+            // Enable session caching by default
+            sessionContext.setSessionCacheEnabled(true);
+            if (sessionCacheSize > 0) {
+                sessionContext.setSessionCacheSize((int) Math.min(sessionCacheSize, Integer.MAX_VALUE));
+            }
+            if (sessionTimeout > 0) {
+                sessionContext.setSessionTimeout((int) Math.min(sessionTimeout, Integer.MAX_VALUE));
+            }
 
             keyMaterialProvider = null;
 
@@ -202,6 +218,11 @@ public final class ReferenceCountedOpenSslServerContext extends ReferenceCounted
         @Override
         public void handle(long ssl, byte[] keyTypeBytes, byte[][] asn1DerEncodedPrincipals) throws Exception {
             final ReferenceCountedOpenSslEngine engine = engineMap.get(ssl);
+            if (engine == null) {
+                // Maybe null if destroyed in the meantime.
+                return;
+            }
+            engine.setupHandshakeSession();
             try {
                 // For now we just ignore the asn1DerEncodedPrincipals as this is kind of inline with what the
                 // OpenJDK SSLEngineImpl does.
@@ -233,7 +254,7 @@ public final class ReferenceCountedOpenSslServerContext extends ReferenceCounted
 
         ExtendedTrustManagerVerifyCallback(OpenSslEngineMap engineMap, X509ExtendedTrustManager manager) {
             super(engineMap);
-            this.manager = OpenSslTlsv13X509ExtendedTrustManager.wrap(manager, false);
+            this.manager = OpenSslTlsv13X509ExtendedTrustManager.wrap(manager);
         }
 
         @Override

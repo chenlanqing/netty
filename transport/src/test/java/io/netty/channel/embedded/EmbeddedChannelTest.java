@@ -40,7 +40,6 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandler;
-import io.netty.channel.ChannelHandlerAdapter;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelId;
 import io.netty.channel.ChannelInitializer;
@@ -51,6 +50,17 @@ import io.netty.util.concurrent.FutureListener;
 import io.netty.util.concurrent.ScheduledFuture;
 
 public class EmbeddedChannelTest {
+
+    @Test
+    public void testParent() {
+        EmbeddedChannel parent = new EmbeddedChannel();
+        EmbeddedChannel channel = new EmbeddedChannel(parent, EmbeddedChannelId.INSTANCE, true, false);
+        assertSame(parent, channel.parent());
+        assertNull(parent.parent());
+
+        assertFalse(channel.finish());
+        assertFalse(parent.finish());
+    }
 
     @Test
     public void testNotRegistered() throws Exception {
@@ -137,7 +147,7 @@ public class EmbeddedChannelTest {
     public void testHandlerAddedExecutedInEventLoop() throws Throwable {
         final CountDownLatch latch = new CountDownLatch(1);
         final AtomicReference<Throwable> error = new AtomicReference<>();
-        final ChannelHandler handler = new ChannelHandlerAdapter() {
+        final ChannelHandler handler = new ChannelHandler() {
             @Override
             public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
                 try {

@@ -30,11 +30,11 @@
 
   <name>Netty/BOM</name>
   <description>Netty (Bill of Materials)</description>
-  <url>http://netty.io/</url>
+  <url>https://netty.io/</url>
 
   <organization>
     <name>The Netty Project</name>
-    <url>http://netty.io/</url>
+    <url>https://netty.io/</url>
   </organization>
 
   <licenses>
@@ -57,9 +57,9 @@
       <id>netty.io</id>
       <name>The Netty Project Contributors</name>
       <email>netty@googlegroups.com</email>
-      <url>http://netty.io/</url>
+      <url>https://netty.io/</url>
       <organization>The Netty Project</organization>
-      <organizationUrl>http://netty.io/</organizationUrl>
+      <organizationUrl>https://netty.io/</organizationUrl>
     </developer>
   </developers>
 
@@ -183,8 +183,25 @@
       </dependency>
       <dependency>
         <groupId>io.netty</groupId>
+        <artifactId>netty-resolver-dns-native-macos</artifactId>
+        <version>5.0.0.Final-SNAPSHOT</version>
+      </dependency>
+      <dependency>
+        <groupId>io.netty</groupId>
+        <artifactId>netty-resolver-dns-native-macos</artifactId>
+        <version>5.0.0.Final-SNAPSHOT</version>
+        <classifier>osx-x86_64</classifier>
+      </dependency>
+      <dependency>
+        <groupId>io.netty</groupId>
         <artifactId>netty-transport-native-unix-common</artifactId>
         <version>5.0.0.Final-SNAPSHOT</version>
+      </dependency>
+      <dependency>
+        <groupId>io.netty</groupId>
+        <artifactId>netty-transport-native-unix-common</artifactId>
+        <version>5.0.0.Final-SNAPSHOT</version>
+        <classifier>linux-aarch64</classifier>
       </dependency>
       <dependency>
         <groupId>io.netty</groupId>
@@ -202,6 +219,12 @@
         <groupId>io.netty</groupId>
         <artifactId>netty-transport-native-epoll</artifactId>
         <version>5.0.0.Final-SNAPSHOT</version>
+      </dependency>
+      <dependency>
+        <groupId>io.netty</groupId>
+        <artifactId>netty-transport-native-epoll</artifactId>
+        <version>5.0.0.Final-SNAPSHOT</version>
+        <classifier>linux-aarch64</classifier>
       </dependency>
       <dependency>
         <groupId>io.netty</groupId>
