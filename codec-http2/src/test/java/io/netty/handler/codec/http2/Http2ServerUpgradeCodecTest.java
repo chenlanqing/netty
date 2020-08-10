@@ -18,6 +18,8 @@ import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.channel.DefaultChannelId;
+import io.netty.channel.ServerChannel;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.handler.codec.http.DefaultFullHttpRequest;
 import io.netty.handler.codec.http.DefaultHttpHeaders;
@@ -32,6 +34,7 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
+import org.mockito.Mockito;
 
 public class Http2ServerUpgradeCodecTest {
 
@@ -63,7 +66,9 @@ public class Http2ServerUpgradeCodecTest {
         request.headers().set(HttpHeaderNames.UPGRADE, "h2c");
         request.headers().set("HTTP2-Settings", "AAMAAABkAAQAAP__");
 
-        EmbeddedChannel channel = new EmbeddedChannel(new ChannelInboundHandlerAdapter());
+        ServerChannel parent = Mockito.mock(ServerChannel.class);
+        EmbeddedChannel channel = new EmbeddedChannel(parent, DefaultChannelId.newInstance(), true, false,
+                new ChannelInboundHandlerAdapter());
         ChannelHandlerContext ctx = channel.pipeline().firstContext();
         Http2ServerUpgradeCodec codec;
         if (multiplexer == null) {
@@ -76,6 +81,11 @@ public class Http2ServerUpgradeCodecTest {
         // Flush the channel to ensure we write out all buffered data
         channel.flush();
 
+        channel.writeInbound(Http2CodecUtil.connectionPrefaceBuf());
+        Http2FrameInboundWriter writer = new Http2FrameInboundWriter(channel);
+        writer.writeInboundSettings(new Http2Settings());
+        writer.writeInboundRstStream(Http2CodecUtil.HTTP_UPGRADE_STREAM_ID, Http2Error.CANCEL.code());
+
         assertSame(handler, channel.pipeline().remove(handler.getClass()));
         assertNull(channel.pipeline().get(handler.getClass()));
         assertTrue(channel.finish());
@@ -84,6 +94,10 @@ public class Http2ServerUpgradeCodecTest {
         ByteBuf settingsBuffer = channel.readOutbound();
         assertNotNull(settingsBuffer);
         settingsBuffer.release();
+
+        ByteBuf buf = channel.readOutbound();
+        assertNotNull(buf);
+        buf.release();
 
         assertNull(channel.readOutbound());
     }

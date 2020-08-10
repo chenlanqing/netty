@@ -128,18 +128,19 @@ public class WebSocketServerHandshaker07 extends WebSocketServerHandshaker {
      */
     @Override
     protected FullHttpResponse newHandshakeResponse(FullHttpRequest req, HttpHeaders headers) {
+        CharSequence key = req.headers().get(HttpHeaderNames.SEC_WEBSOCKET_KEY);
+        if (key == null) {
+            throw new WebSocketHandshakeException("not a WebSocket request: missing key");
+        }
 
         FullHttpResponse res =
-                new DefaultFullHttpResponse(HTTP_1_1, HttpResponseStatus.SWITCHING_PROTOCOLS);
+                new DefaultFullHttpResponse(HTTP_1_1, HttpResponseStatus.SWITCHING_PROTOCOLS,
+                        req.content().alloc().buffer(0));
 
         if (headers != null) {
             res.headers().add(headers);
         }
 
-        CharSequence key = req.headers().get(HttpHeaderNames.SEC_WEBSOCKET_KEY);
-        if (key == null) {
-            throw new WebSocketHandshakeException("not a WebSocket request: missing key");
-        }
         String acceptSeed = key + WEBSOCKET_07_ACCEPT_GUID;
         byte[] sha1 = WebSocketUtil.sha1(acceptSeed.getBytes(CharsetUtil.US_ASCII));
         String accept = WebSocketUtil.base64(sha1);
@@ -148,9 +149,9 @@ public class WebSocketServerHandshaker07 extends WebSocketServerHandshaker {
             logger.debug("WebSocket version 07 server handshake key: {}, response: {}.", key, accept);
         }
 
-        res.headers().add(HttpHeaderNames.UPGRADE, HttpHeaderValues.WEBSOCKET);
-        res.headers().add(HttpHeaderNames.CONNECTION, HttpHeaderValues.UPGRADE);
-        res.headers().add(HttpHeaderNames.SEC_WEBSOCKET_ACCEPT, accept);
+        res.headers().set(HttpHeaderNames.UPGRADE, HttpHeaderValues.WEBSOCKET)
+                     .set(HttpHeaderNames.CONNECTION, HttpHeaderValues.UPGRADE)
+                     .set(HttpHeaderNames.SEC_WEBSOCKET_ACCEPT, accept);
 
         String subprotocols = req.headers().get(HttpHeaderNames.SEC_WEBSOCKET_PROTOCOL);
         if (subprotocols != null) {
