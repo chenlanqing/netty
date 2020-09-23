@@ -30,7 +30,8 @@ import java.nio.channels.FileChannel;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
 
-import static io.netty.buffer.Unpooled.*;
+import static io.netty.buffer.Unpooled.EMPTY_BUFFER;
+import static io.netty.buffer.Unpooled.wrappedBuffer;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -94,7 +95,8 @@ public abstract class AbstractDiskHttpData extends AbstractHttpData {
                     getBaseDirectory()));
         }
         if (deleteOnExit()) {
-            tmpFile.deleteOnExit();
+            // See https://github.com/netty/netty/issues/10351
+            DeleteFileOnExitHook.add(tmpFile.getPath());
         }
         return tmpFile;
     }
@@ -161,21 +163,21 @@ public abstract class AbstractDiskHttpData extends AbstractHttpData {
                     RandomAccessFile accessFile = new RandomAccessFile(file, "rw");
                     fileChannel = accessFile.getChannel();
                 }
-                int totalWritten = 0;
+                int remaining = localsize;
                 long position = fileChannel.position();
                 int index = buffer.readerIndex();
-                while (totalWritten < localsize) {
-                    int written = buffer.getBytes(index, fileChannel, position, localsize - totalWritten);
+                while (remaining > 0) {
+                    int written = buffer.getBytes(index, fileChannel, position, remaining);
                     if (written < 0) {
                         break;
                     }
-                    totalWritten += written;
+                    remaining -= written;
                     position += written;
                     index += written;
                 }
                 fileChannel.position(position);
                 buffer.readerIndex(index);
-                size += localsize;
+                size += localsize - remaining;
             } finally {
                 // Release the buffer as it was retained before and we not need a reference to it at all
                 // See https://github.com/netty/netty/issues/1516
@@ -265,11 +267,20 @@ public abstract class AbstractDiskHttpData extends AbstractHttpData {
             }
             fileChannel = null;
         }
-        if (! isRenamed) {
+        if (!isRenamed) {
+            String filePath = null;
+
             if (file != null && file.exists()) {
+                filePath = file.getPath();
                 if (!file.delete()) {
+                    filePath = null;
                     logger.warn("Failed to delete: {}", file);
                 }
+            }
+
+            // If you turn on deleteOnExit make sure it is executed.
+            if (deleteOnExit() && filePath != null) {
+                DeleteFileOnExitHook.remove(filePath);
             }
             file = null;
         }
@@ -307,13 +318,16 @@ public abstract class AbstractDiskHttpData extends AbstractHttpData {
             while (read < length) {
                 int readnow = fileChannel.read(byteBuffer);
                 if (readnow == -1) {
+                    fileChannel.close();
+                    fileChannel = null;
                     break;
                 }
                 read += readnow;
             }
-        } finally {
+        } catch (IOException e) {
             fileChannel.close();
             fileChannel = null;
+            throw e;
         }
         if (read == 0) {
             return EMPTY_BUFFER;
@@ -370,7 +384,7 @@ public abstract class AbstractDiskHttpData extends AbstractHttpData {
                     if (chunkSize < size - position) {
                         chunkSize = size - position;
                     }
-                    position += in.transferTo(position, chunkSize , out);
+                    position += in.transferTo(position, chunkSize, out);
                 }
             } catch (IOException e) {
                 exception = e;
@@ -422,6 +436,7 @@ public abstract class AbstractDiskHttpData extends AbstractHttpData {
 
     /**
      * Utility function
+     *
      * @return the array of bytes
      */
     private static byte[] readFrom(File src) throws IOException {

@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 The Netty Project
+ * Copyright 2020 The Netty Project
  *
  * The Netty Project licenses this file to you under the Apache License,
  * version 2.0 (the "License"); you may not use this file except in compliance
@@ -13,20 +13,24 @@
  * License for the specific language governing permissions and limitations
  * under the License.
  */
-package io.netty.channel;
+package io.netty.handler.ipfilter;
 
-import java.nio.channels.ClosedChannelException;
+import java.net.InetSocketAddress;
+import java.util.Comparator;
 
-final class ExtendedClosedChannelException extends ClosedChannelException {
+/**
+ * This comparator is only used for searching.
+ */
+final class IpSubnetFilterRuleComparator implements Comparator<Object> {
 
-    ExtendedClosedChannelException(Throwable cause) {
-        if (cause != null) {
-            initCause(cause);
-        }
+    static final IpSubnetFilterRuleComparator INSTANCE = new IpSubnetFilterRuleComparator();
+
+    private IpSubnetFilterRuleComparator() {
+        // Prevent outside initialization
     }
 
     @Override
-    public Throwable fillInStackTrace() {
-        return this;
+    public int compare(Object o1, Object o2) {
+        return ((IpSubnetFilterRule) o1).compareTo((InetSocketAddress) o2);
     }
 }

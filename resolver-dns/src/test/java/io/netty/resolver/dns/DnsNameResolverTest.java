@@ -922,7 +922,7 @@ public class DnsNameResolverTest {
                     group.next(), new ReflectiveChannelFactory<DatagramChannel>(NioDatagramChannel.class),
                     NoopDnsCache.INSTANCE, nsCache, NoopDnsQueryLifecycleObserverFactory.INSTANCE, 3000,
                     ipv4Preferred ? ResolvedAddressTypes.IPV4_ONLY : ResolvedAddressTypes.IPV6_ONLY, true,
-                    10, true, 4096, false, HostsFileEntriesResolver.DEFAULT,
+                    10, 4096, false, HostsFileEntriesResolver.DEFAULT,
                     new SequentialDnsServerAddressStreamProvider(dnsServer2.localAddress(), dnsServer3.localAddress()),
                     DnsNameResolver.DEFAULT_SEARCH_DOMAINS, 0, true) {
                 @Override
@@ -1268,7 +1268,7 @@ public class DnsNameResolverTest {
         final DnsNameResolver resolver = new DnsNameResolver(
                 group.next(), new ReflectiveChannelFactory<DatagramChannel>(NioDatagramChannel.class),
                 NoopDnsCache.INSTANCE, nsCache, lifecycleObserverFactory, 3000, ResolvedAddressTypes.IPV4_ONLY, true,
-                10, true, 4096, false, HostsFileEntriesResolver.DEFAULT,
+                10, 4096, false, HostsFileEntriesResolver.DEFAULT,
                 new SingletonDnsServerAddressStreamProvider(dnsServer.localAddress()),
                 DnsNameResolver.DEFAULT_SEARCH_DOMAINS, 0, true) {
             @Override
@@ -1425,7 +1425,7 @@ public class DnsNameResolverTest {
         final DnsNameResolver resolver = new DnsNameResolver(
                 group.next(), new ReflectiveChannelFactory<DatagramChannel>(NioDatagramChannel.class),
                 cache, authoritativeDnsServerCache, NoopDnsQueryLifecycleObserverFactory.INSTANCE, 2000,
-                ResolvedAddressTypes.IPV4_ONLY, true, 10, true, 4096,
+                ResolvedAddressTypes.IPV4_ONLY, true, 10, 4096,
                 false, HostsFileEntriesResolver.DEFAULT,
                 new SingletonDnsServerAddressStreamProvider(redirectServer.localAddress()),
                 DnsNameResolver.DEFAULT_SEARCH_DOMAINS, 0, true) {
@@ -1587,7 +1587,7 @@ public class DnsNameResolverTest {
                 group.next(), new ReflectiveChannelFactory<DatagramChannel>(NioDatagramChannel.class),
                 NoopDnsCache.INSTANCE, authoritativeDnsServerCache,
                 NoopDnsQueryLifecycleObserverFactory.INSTANCE, 2000, ResolvedAddressTypes.IPV4_ONLY,
-                true, 10, true, 4096,
+                true, 10, 4096,
                 false, HostsFileEntriesResolver.DEFAULT,
                 new SingletonDnsServerAddressStreamProvider(redirectServer.localAddress()),
                 DnsNameResolver.DEFAULT_SEARCH_DOMAINS, 0, true) {
@@ -1724,7 +1724,7 @@ public class DnsNameResolverTest {
                 loop, new ReflectiveChannelFactory<DatagramChannel>(NioDatagramChannel.class),
                 cache, authoritativeDnsServerCache,
                 NoopDnsQueryLifecycleObserverFactory.INSTANCE, 2000, ResolvedAddressTypes.IPV4_ONLY,
-                true, 10, true, 4096,
+                true, 10, 4096,
                 false, HostsFileEntriesResolver.DEFAULT,
                 new SingletonDnsServerAddressStreamProvider(redirectServer.localAddress()),
                 DnsNameResolver.DEFAULT_SEARCH_DOMAINS, 0, true) {
@@ -1765,6 +1765,58 @@ public class DnsNameResolverTest {
             resolver.close();
             group.shutdownGracefully(0, 0, TimeUnit.SECONDS);
             redirectServer.stop();
+        }
+    }
+
+    @Test
+    public void testNsLoopFailsResolveWithAuthoritativeDnsServerCache() throws Exception {
+        testNsLoopFailsResolve(new DefaultAuthoritativeDnsServerCache());
+    }
+
+    @Test
+    public void testNsLoopFailsResolveWithoutAuthoritativeDnsServerCache() throws Exception {
+        testNsLoopFailsResolve(NoopAuthoritativeDnsServerCache.INSTANCE);
+    }
+
+    private void testNsLoopFailsResolve(AuthoritativeDnsServerCache authoritativeDnsServerCache) throws Exception {
+        final String domain = "netty.io";
+        final String ns1Name = "ns1." + domain;
+        final String ns2Name = "ns2." + domain;
+
+        TestDnsServer testDnsServer = new TestDnsServer(new HashSet<String>(
+                Collections.singletonList(domain))) {
+
+            @Override
+            protected DnsMessage filterMessage(DnsMessage message) {
+                // Just always return NS records only without any additional records (glue records).
+                // Because of this the resolver will never be able to resolve and so fail eventually at some
+                // point.
+                for (QuestionRecord record: message.getQuestionRecords()) {
+                    if (record.getDomainName().equals(domain)) {
+                        message.getAdditionalRecords().clear();
+                        message.getAnswerRecords().clear();
+                        message.getAuthorityRecords().add(TestDnsServer.newNsRecord(domain, ns1Name));
+                        message.getAuthorityRecords().add(TestDnsServer.newNsRecord(domain, ns2Name));
+                    }
+                }
+                return message;
+            }
+        };
+        testDnsServer.start();
+        DnsNameResolverBuilder builder = newResolver();
+
+        final DnsNameResolver resolver = builder.resolveCache(NoopDnsCache.INSTANCE)
+                .authoritativeDnsServerCache(authoritativeDnsServerCache)
+                .nameServerProvider(new SingletonDnsServerAddressStreamProvider(testDnsServer.localAddress())).build();
+
+        try {
+            assertThat(resolver.resolve(domain).await().cause(),
+                    Matchers.<Throwable>instanceOf(UnknownHostException.class));
+            assertThat(resolver.resolveAll(domain).await().cause(),
+                    Matchers.<Throwable>instanceOf(UnknownHostException.class));
+        } finally {
+            resolver.close();
+            testDnsServer.stop();
         }
     }
 
@@ -2480,7 +2532,6 @@ public class DnsNameResolverTest {
                 null, // resolvedAddressTypes, see https://github.com/netty/netty/pull/8445
                 true, // recursionDesired
                 1, // maxQueriesPerResolve
-                false, // traceEnabled
                 4096, // maxPayloadSize
                 true, // optResourceEnabled
                 HostsFileEntriesResolver.DEFAULT, // hostsFileEntriesResolver
@@ -3007,5 +3058,80 @@ public class DnsNameResolverTest {
     private static void assertResolvedAddress(InetAddress resolvedAddress, String ipAddr, String hostname) {
         assertEquals(ipAddr, resolvedAddress.getHostAddress());
         assertEquals(hostname, resolvedAddress.getHostName());
+    }
+
+    @Test
+    public void testAllNameServers() throws IOException {
+        final String domain = "netty.io";
+        final String ipv4Addr = "1.2.3.4";
+        final AtomicInteger server2Counter = new AtomicInteger();
+        final TestDnsServer dnsServer2 = new TestDnsServer(new RecordStore() {
+            @Override
+            public Set<ResourceRecord> getRecords(QuestionRecord question) {
+                server2Counter.incrementAndGet();
+                ResourceRecordModifier rm = new ResourceRecordModifier();
+                rm.setDnsClass(RecordClass.IN);
+                rm.setDnsName(question.getDomainName());
+                rm.setDnsTtl(100);
+
+                rm.setDnsType(question.getRecordType());
+                rm.put(DnsAttribute.IP_ADDRESS, ipv4Addr);
+                return Collections.singleton(rm.getEntry());
+            }
+        });
+        dnsServer2.start();
+
+        final AtomicInteger server3Counter = new AtomicInteger();
+        final TestDnsServer dnsServer3 = new TestDnsServer(new RecordStore() {
+            @Override
+            public Set<ResourceRecord> getRecords(QuestionRecord question) {
+                server3Counter.incrementAndGet();
+                ResourceRecordModifier rm = new ResourceRecordModifier();
+                rm.setDnsClass(RecordClass.IN);
+                rm.setDnsName(question.getDomainName());
+                rm.setDnsTtl(100);
+
+                rm.setDnsType(question.getRecordType());
+                rm.put(DnsAttribute.IP_ADDRESS, ipv4Addr);
+                return Collections.singleton(rm.getEntry());
+            }
+        });
+        dnsServer3.start();
+        DnsNameResolver resolver = null;
+        try {
+            resolver = newResolver()
+                    .resolveCache(NoopDnsCache.INSTANCE)
+                    .cnameCache(NoopDnsCnameCache.INSTANCE)
+                    .recursionDesired(true)
+                    .maxQueriesPerResolve(16)
+                    .nameServerProvider(new DnsServerAddressStreamProvider() {
+                        private final DnsServerAddresses addresses =
+                                DnsServerAddresses.rotational(dnsServer2.localAddress(), dnsServer3.localAddress());
+                        @Override
+                        public DnsServerAddressStream nameServerAddressStream(String hostname) {
+                            return addresses.stream();
+                        }
+                    })
+                    .resolvedAddressTypes(ResolvedAddressTypes.IPV4_ONLY).build();
+
+            assertResolvedAddress(resolver.resolve(domain).syncUninterruptibly().getNow(), ipv4Addr, domain);
+            assertEquals(1, server2Counter.get());
+            assertEquals(0, server3Counter.get());
+            assertResolvedAddress(resolver.resolve(domain).syncUninterruptibly().getNow(), ipv4Addr, domain);
+            assertEquals(1, server2Counter.get());
+            assertEquals(1, server3Counter.get());
+            assertResolvedAddress(resolver.resolve(domain).syncUninterruptibly().getNow(), ipv4Addr, domain);
+            assertEquals(2, server2Counter.get());
+            assertEquals(1, server3Counter.get());
+            assertResolvedAddress(resolver.resolve(domain).syncUninterruptibly().getNow(), ipv4Addr, domain);
+            assertEquals(2, server2Counter.get());
+            assertEquals(2, server3Counter.get());
+        } finally {
+            dnsServer2.stop();
+            dnsServer3.stop();
+            if (resolver != null) {
+                resolver.close();
+            }
+        }
     }
 }
