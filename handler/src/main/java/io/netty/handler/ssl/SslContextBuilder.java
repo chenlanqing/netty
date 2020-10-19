@@ -165,7 +165,7 @@ public final class SslContextBuilder {
     /**
      * Creates a builder for new server-side {@link SslContext} with {@link KeyManager}.
      *
-     * @param KeyManager non-{@code null} KeyManager for server's private key
+     * @param keyManager non-{@code null} KeyManager for server's private key
      */
     public static SslContextBuilder forServer(KeyManager keyManager) {
         return new SslContextBuilder(true).keyManager(keyManager);
@@ -390,7 +390,7 @@ public final class SslContextBuilder {
     public SslContextBuilder keyManager(PrivateKey key, String keyPassword, X509Certificate... keyCertChain) {
         if (forServer) {
             checkNotNull(keyCertChain, "keyCertChain required for servers");
-            if (keyCertChain.length == 0) {
+            if (keyCertChain.length == 0) { // lgtm[java/dereferenced-value-may-be-null]
                 throw new IllegalArgumentException("keyCertChain must be non-empty");
             }
             checkNotNull(key, "key required for servers");

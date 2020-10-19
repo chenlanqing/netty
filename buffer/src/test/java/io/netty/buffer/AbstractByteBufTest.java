@@ -58,12 +58,12 @@ import static io.netty.buffer.Unpooled.unreleasableBuffer;
 import static io.netty.buffer.Unpooled.wrappedBuffer;
 import static io.netty.util.internal.EmptyArrays.EMPTY_BYTES;
 import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
-import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.junit.Assume.assumeFalse;
@@ -4923,5 +4923,20 @@ public abstract class AbstractByteBufTest {
         // Default implementation has fast writable == writable
         assertEquals(50, buffer.maxFastWritableBytes());
         buffer.release();
+    }
+
+    @Test
+    public void testEnsureWritableIntegerOverflow() {
+        ByteBuf buffer = newBuffer(CAPACITY);
+        buffer.writerIndex(buffer.readerIndex());
+        buffer.writeByte(1);
+        try {
+            buffer.ensureWritable(Integer.MAX_VALUE);
+            fail();
+        } catch (IndexOutOfBoundsException e) {
+            // expected
+        } finally {
+            buffer.release();
+        }
     }
 }
