@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -18,26 +18,32 @@ package io.netty.handler.codec.http.multipart;
 import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.http.DefaultHttpRequest;
 import io.netty.handler.codec.http.HttpRequest;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.Isolated;
 
 import java.io.File;
 import java.io.FilenameFilter;
 import java.io.IOException;
+import java.util.UUID;
 
 import static io.netty.handler.codec.http.HttpMethod.POST;
 import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Test DeleteFileOnExitHook
  */
+@Isolated("The DeleteFileOnExitHook has static shared mutable, " +
+        "and can interferre with other tests that use DiskAttribute")
 public class DeleteFileOnExitHookTest {
     private static final HttpRequest REQUEST = new DefaultHttpRequest(HTTP_1_1, POST, "/form");
-    private static final String HOOK_TEST_TMP = "target/DeleteFileOnExitHookTest/tmp";
+    private static final String HOOK_TEST_TMP = "target/DeleteFileOnExitHookTest-" + UUID.randomUUID()  + "/tmp";
     private FileUpload fu;
 
-    @Before
+    @BeforeEach
     public void setUp() throws IOException {
         DefaultHttpDataFactory defaultHttpDataFactory = new DefaultHttpDataFactory(true);
         defaultHttpDataFactory.setBaseDir(HOOK_TEST_TMP);

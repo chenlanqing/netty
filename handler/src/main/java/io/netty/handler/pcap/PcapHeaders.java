@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -16,6 +16,9 @@
 package io.netty.handler.pcap;
 
 import io.netty.buffer.ByteBuf;
+
+import java.io.IOException;
+import java.io.OutputStream;
 
 final class PcapHeaders {
 
@@ -31,7 +34,7 @@ final class PcapHeaders {
      *      <li> network </li>
      * </ol>
      */
-    private static final byte[] GLOBAL_HEADER = new byte[]{-95, -78, -61, -44, 0, 2, 0, 4, 0, 0,
+    private static final byte[] GLOBAL_HEADER = {-95, -78, -61, -44, 0, 2, 0, 4, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, -1, -1, 0, 0, 0, 1};
 
     private PcapHeaders() {
@@ -39,12 +42,13 @@ final class PcapHeaders {
     }
 
     /**
-     * Write Pcap Global Header
+     * Writes the Pcap Global Header to the provided {@code OutputStream}
      *
-     * @param byteBuf byteBuf ByteBuf where we'll write header data
+     * @param outputStream OutputStream where Pcap data will be written.
+     * @throws IOException if there is an error writing to the {@code OutputStream}
      */
-    public static void writeGlobalHeader(ByteBuf byteBuf) {
-        byteBuf.writeBytes(GLOBAL_HEADER);
+    static void writeGlobalHeader(OutputStream outputStream) throws IOException {
+        outputStream.write(GLOBAL_HEADER);
     }
 
     /**

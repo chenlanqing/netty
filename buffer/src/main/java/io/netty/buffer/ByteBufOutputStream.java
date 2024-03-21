@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -138,7 +138,7 @@ public class ByteBufOutputStream extends OutputStream implements DataOutput {
                 throw new IOException("The stream is closed");
             }
             // Suppress a warning since the stream is closed in the close() method
-            utf8out = out = new DataOutputStream(this); // lgtm[java/output-resource-leak]
+            utf8out = out = new DataOutputStream(this);
         }
         out.writeUTF(s);
     }

@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -50,7 +50,7 @@ final class EthernetPacket {
      * @param payload Payload of IPv4
      */
     static void writeIPv4(ByteBuf byteBuf, ByteBuf payload) {
-        EthernetPacket.writePacket(byteBuf, payload, DUMMY_SOURCE_MAC_ADDRESS, DUMMY_DESTINATION_MAC_ADDRESS, V4);
+        writePacket(byteBuf, payload, DUMMY_SOURCE_MAC_ADDRESS, DUMMY_DESTINATION_MAC_ADDRESS, V4);
     }
 
     /**
@@ -60,7 +60,7 @@ final class EthernetPacket {
      * @param payload Payload of IPv6
      */
     static void writeIPv6(ByteBuf byteBuf, ByteBuf payload) {
-        EthernetPacket.writePacket(byteBuf, payload, DUMMY_SOURCE_MAC_ADDRESS, DUMMY_DESTINATION_MAC_ADDRESS, V6);
+        writePacket(byteBuf, payload, DUMMY_SOURCE_MAC_ADDRESS, DUMMY_DESTINATION_MAC_ADDRESS, V6);
     }
 
     /**

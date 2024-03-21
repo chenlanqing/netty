@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -75,6 +75,23 @@ public enum SslProvider {
             case OPENSSL:
             case OPENSSL_REFCNT:
                 return OpenSsl.isTlsv13Supported();
+            default:
+                throw new Error("Unknown SslProvider: " + sslProvider);
+        }
+    }
+
+    /**
+     * Returns {@code true} if the specified {@link SslProvider} supports the specified {@link SslContextOption},
+     * {@code false} otherwise.
+     */
+    public static boolean isOptionSupported(SslProvider sslProvider, SslContextOption<?> option) {
+        switch (sslProvider) {
+            case JDK:
+                // We currently don't support any SslContextOptions when using the JDK implementation
+                return false;
+            case OPENSSL:
+            case OPENSSL_REFCNT:
+                return OpenSsl.isOptionSupported(option);
             default:
                 throw new Error("Unknown SslProvider: " + sslProvider);
         }

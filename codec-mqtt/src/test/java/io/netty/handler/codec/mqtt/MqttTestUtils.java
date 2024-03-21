@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -20,10 +20,10 @@ import io.netty.buffer.ByteBufUtil;
 
 import java.util.List;
 
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.fail;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.fail;
 
 public final class MqttTestUtils {
     private MqttTestUtils() {
@@ -32,6 +32,8 @@ public final class MqttTestUtils {
     public static void validateProperties(MqttProperties expected, MqttProperties actual) {
         for (MqttProperties.MqttProperty expectedProperty : expected.listAll()) {
             MqttProperties.MqttProperty actualProperty = actual.getProperty(expectedProperty.propertyId);
+            List<? extends MqttProperties.MqttProperty> actualProperties =
+                    actual.getProperties(expectedProperty.propertyId);
             switch (MqttProperties.MqttPropertyType.valueOf(expectedProperty.propertyId)) {
                 // one byte value integer property
                 case PAYLOAD_FORMAT_INDICATOR:
@@ -44,7 +46,7 @@ public final class MqttTestUtils {
                 case SHARED_SUBSCRIPTION_AVAILABLE: {
                     final Integer expectedValue = ((MqttProperties.IntegerProperty) expectedProperty).value;
                     final Integer actualValue = ((MqttProperties.IntegerProperty) actualProperty).value;
-                    assertEquals("one byte property doesn't match", expectedValue, actualValue);
+                    assertEquals(expectedValue, actualValue, "one byte property doesn't match");
                     break;
                 }
                 // two byte value integer property
@@ -54,7 +56,7 @@ public final class MqttTestUtils {
                 case TOPIC_ALIAS: {
                     final Integer expectedValue = ((MqttProperties.IntegerProperty) expectedProperty).value;
                     final Integer actualValue = ((MqttProperties.IntegerProperty) actualProperty).value;
-                    assertEquals("two byte property doesn't match", expectedValue, actualValue);
+                    assertEquals(expectedValue, actualValue, "two byte property doesn't match");
                     break;
                 }
                 // four byte value integer property
@@ -64,14 +66,13 @@ public final class MqttTestUtils {
                 case MAXIMUM_PACKET_SIZE: {
                     final Integer expectedValue = ((MqttProperties.IntegerProperty) expectedProperty).value;
                     final Integer actualValue = ((MqttProperties.IntegerProperty) actualProperty).value;
-                    assertEquals("four byte property doesn't match", expectedValue, actualValue);
+                    assertEquals(expectedValue, actualValue, "four byte property doesn't match");
                     break;
                 }
                 // four byte value integer property
                 case SUBSCRIPTION_IDENTIFIER: {
                     final Integer expectedValue = ((MqttProperties.IntegerProperty) expectedProperty).value;
-                    final Integer actualValue = ((MqttProperties.IntegerProperty) actualProperty).value;
-                    assertEquals("variable byte integer property doesn't match", expectedValue, actualValue);
+                    assertContainsValue("Subscription ID doesn't match", expectedValue, actualProperties);
                     break;
                 }
                 // UTF-8 string value integer property
@@ -84,7 +85,7 @@ public final class MqttTestUtils {
                 case REASON_STRING: {
                     final String expectedValue = ((MqttProperties.StringProperty) expectedProperty).value;
                     final String actualValue = ((MqttProperties.StringProperty) actualProperty).value;
-                    assertEquals("String property doesn't match", expectedValue, actualValue);
+                    assertEquals(expectedValue, actualValue, "String property doesn't match");
                     break;
                 }
                 // User property
@@ -93,9 +94,9 @@ public final class MqttTestUtils {
                             ((MqttProperties.UserProperties) expectedProperty).value;
                     final List<MqttProperties.StringPair> actualPairs =
                             ((MqttProperties.UserProperties) actualProperty).value;
-                    assertEquals("User properties count doesn't match", expectedPairs, actualPairs);
+                    assertEquals(expectedPairs, actualPairs, "User properties count doesn't match");
                     for (int i = 0; i < expectedPairs.size(); i++) {
-                        assertEquals("User property mismatch", expectedPairs.get(i), actualPairs.get(i));
+                        assertEquals(expectedPairs.get(i), actualPairs.get(i), "User property mismatch");
                     }
                     break;
                 }
@@ -106,7 +107,7 @@ public final class MqttTestUtils {
                     final byte[] actualValue = ((MqttProperties.BinaryProperty) actualProperty).value;
                     final String expectedHexDump = ByteBufUtil.hexDump(expectedValue);
                     final String actualHexDump = ByteBufUtil.hexDump(actualValue);
-                    assertEquals("byte[] property doesn't match", expectedHexDump, actualHexDump);
+                    assertEquals(expectedHexDump, actualHexDump, "byte[] property doesn't match");
                     break;
                 }
                 default:
@@ -115,8 +116,20 @@ public final class MqttTestUtils {
         }
         for (MqttProperties.MqttProperty actualProperty : actual.listAll()) {
             MqttProperties.MqttProperty expectedProperty = expected.getProperty(actualProperty.propertyId);
-            assertNotNull("Property " + actualProperty.propertyId + " not expected", expectedProperty);
+            assertNotNull(expectedProperty, "Property " + actualProperty.propertyId + " not expected");
         }
+    }
+
+    private static void assertContainsValue(String message,
+                                            Integer expectedValue,
+                                            List<? extends MqttProperties.MqttProperty> properties) {
+        for (MqttProperties.MqttProperty property: properties) {
+            if (property instanceof MqttProperties.IntegerProperty &&
+                    ((MqttProperties.IntegerProperty) property).value == expectedValue) {
+                return;
+            }
+        }
+        fail(message + " - properties didn't contain expected integer value " + expectedValue + ": " + properties);
     }
 
     public static void validateSubscribePayload(MqttSubscribePayload expected, MqttSubscribePayload actual) {
@@ -124,9 +137,9 @@ public final class MqttTestUtils {
         List<MqttTopicSubscription> actualTopicSubscriptions = actual.topicSubscriptions();
 
         assertEquals(
-                "MqttSubscribePayload TopicSubscriptionList size mismatch ",
                 expectedTopicSubscriptions.size(),
-                actualTopicSubscriptions.size());
+                actualTopicSubscriptions.size(),
+                "MqttSubscribePayload TopicSubscriptionList size mismatch");
         for (int i = 0; i < expectedTopicSubscriptions.size(); i++) {
             validateTopicSubscription(expectedTopicSubscriptions.get(i), actualTopicSubscriptions.get(i));
         }
@@ -135,21 +148,21 @@ public final class MqttTestUtils {
     public static void validateTopicSubscription(
             MqttTopicSubscription expected,
             MqttTopicSubscription actual) {
-        assertEquals("MqttTopicSubscription TopicName mismatch ", expected.topicName(), actual.topicName());
+        assertEquals(expected.topicName(), actual.topicName(), "MqttTopicSubscription TopicName mismatch");
         assertEquals(
-                "MqttTopicSubscription Qos mismatch ",
                 expected.qualityOfService(),
-                actual.qualityOfService());
+                actual.qualityOfService(),
+                "MqttTopicSubscription Qos mismatch");
         assertEquals(
-                "MqttTopicSubscription options mismatch ",
                 expected.option(),
-                actual.option());
+                actual.option(),
+                "MqttTopicSubscription options mismatch");
     }
 
     public static void validateUnsubscribePayload(MqttUnsubscribePayload expected, MqttUnsubscribePayload actual) {
         assertArrayEquals(
-                "MqttUnsubscribePayload TopicList mismatch ",
                 expected.topics().toArray(),
-                actual.topics().toArray());
+                actual.topics().toArray(),
+                "MqttUnsubscribePayload TopicList mismatch");
     }
 }

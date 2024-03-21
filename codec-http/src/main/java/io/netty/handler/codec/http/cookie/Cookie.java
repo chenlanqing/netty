@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -17,7 +17,7 @@ package io.netty.handler.codec.http.cookie;
 
 /**
  * An interface defining an
- * <a href="http://en.wikipedia.org/wiki/HTTP_cookie">HTTP cookie</a>.
+ * <a href="https://en.wikipedia.org/wiki/HTTP_cookie">HTTP cookie</a>.
  */
 public interface Cookie extends Comparable<Cookie> {
 
@@ -137,7 +137,7 @@ public interface Cookie extends Comparable<Cookie> {
      * Determines if this {@link Cookie} is HTTP only.
      * If set to true, this {@link Cookie} cannot be accessed by a client
      * side script. However, this works only if the browser supports it.
-     * For for information, please look
+     * For information, please look
      * <a href="https://owasp.org/www-community/HttpOnly">here</a>.
      *
      * @param httpOnly True if the {@link Cookie} is HTTP only, otherwise false.
